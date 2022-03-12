@@ -1,4 +1,5 @@
 #include "stream_reassembler.hh"
+
 #include <iostream>
 
 // Dummy implementation of a stream reassembler.
@@ -19,9 +20,9 @@ StreamReassembler::StreamReassembler(const size_t capacity) : buffer(), _output(
 //! possibly out-of-order, from the logical stream, and assembles any newly
 //! contiguous substrings and writes them into the output stream in order.
 void StreamReassembler::push_nonoverlapped_substring(const string &data, const size_t index) {
-    auto next_elem = buffer.upper_bound(index); // First buffered substring with larger index
-    size_t _index = index;                      // Start index of nonoverlapped substring
-    size_t _last_index = index + data.length(); // Last index of nonoverlapped substring
+    auto next_elem = buffer.upper_bound(index);  // First buffered substring with larger index
+    size_t _index = index;                       // Start index of nonoverlapped substring
+    size_t _last_index = index + data.length();  // Last index of nonoverlapped substring
 
     while (_index <= _last_index) {
         /* Update _last_index */
