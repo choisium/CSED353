@@ -1,11 +1,11 @@
 Assignment 1 Writeup
 =============
 
-My name: [your name here]
+My name: Soomin Choi
 
-My POVIS ID: [your povis id here]
+My POVIS ID: choisium
 
-My student ID (numeric): [your student id here]
+My student ID (numeric): 20160169
 
 This assignment took me about [n] hours to do (including the time on studying, designing, and writing the code).
 
