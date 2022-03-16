@@ -61,8 +61,8 @@ class StreamReassembler {
 
     /* Below functions are auxiliary functions used in upper wrapper, tcp_receiver */
     uint64_t first_unassembled_seqno() const { return next_assembled_index; }
-
     size_t assembled_bytes() const { return _output.buffer_size(); }
+    bool eof() const { return next_assembled_index == eof_index; }
 };
 
 #endif  // SPONGE_LIBSPONGE_STREAM_REASSEMBLER_HH
