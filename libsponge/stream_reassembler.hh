@@ -57,6 +57,12 @@ class StreamReassembler {
     //! \brief Is the internal state empty (other than the output stream)?
     //! \returns `true` if no substrings are waiting to be assembled
     bool empty() const;
+
+
+    /* Below functions are auxiliary functions used in upper wrapper, tcp_receiver */
+    uint64_t first_unassembled_seqno() const { return next_assembled_index; }
+
+    size_t assembled_bytes() const { return _output.buffer_size(); }
 };
 
 #endif  // SPONGE_LIBSPONGE_STREAM_REASSEMBLER_HH
