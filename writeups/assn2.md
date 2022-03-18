@@ -14,7 +14,7 @@ If you used any part of best-submission codes, specify all the best-submission n
 - **Caution**: If you have no idea about above best-submission item, please refer the Assignment PDF for detailed description.
 
 Program Structure and Design of the TCPReceiver and wrap/unwrap routines:
-### wrap/unwrap
+# wrap/unwrap
 ## wrap
 wrap의 경우, absolute sequence number `n`을 `isn`만큼 shifting되고 32-bit로 wrapping된 related sequence number(WrappingInt32)로 바꿔야 한다. 이는 다음과 같은 순서로 계산하여 구할 수 있다.
 1. `n`에 `isn`을 더한다.
@@ -28,7 +28,7 @@ unwrap의 경우, initial sequence number `isn`에 대한 relative sequence numb
     1. 만약 `checkpoint`가 `result`보다 더 큰 값이면, `checkpoint - result` 가 2^31보다 큰지 확인한다. 그렇다면 `result + 2^32`가 `checkpoint`에 더 가까운 값이다.  
     2. 만약 `checkpoint`가 `result`보다 더 작은 값이고, `result`가 2^32보다 크거나 같은 값이라면 `result - checkpoint` 가 2^31보다 큰지 확인한다. 그렇다면 `result - 2^32`가 `checkpoint`에 더 가까운 값이다. 
 
-### TCP Receiver
+# TCP Receiver
 ## Data Structure
 TCP Receiver에 추가한 private member는 다음과 같다.
 1. `_syn_flag`: SYN flag가 설정된 segment의 도달 여부를 기록한다.
