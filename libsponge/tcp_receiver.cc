@@ -12,17 +12,12 @@ using namespace std;
 
 void TCPReceiver::segment_received(const TCPSegment &seg) {
     const TCPHeader &header = seg.header();
-    size_t length = seg.length_in_sequence_space();
 
     /* Set the Initial Sequence Number */
     if (header.syn) {
-        length -= 1;
         _syn_flag = true;
         _isn = header.seqno;
     }
-
-    if (header.fin)
-        length -= 1;
 
     /* If _syn_flag is not set, ignore this segment */
     if (!_syn_flag)
@@ -30,12 +25,10 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
 
     /* Compute the stream_index of current segment */
     uint64_t stream_index;
-    if (header.syn && length == 0) {
+    if (header.syn) {
         stream_index = 0;
     } else {
-        stream_index = unwrap(header.seqno, _isn, _reassembler.first_unassembled_index());
-        if (!header.syn)
-            stream_index -= 1;
+        stream_index = unwrap(header.seqno - 1, _isn, _reassembler.first_unassembled_index());
     }
 
     /* Push payload to reassembler */
