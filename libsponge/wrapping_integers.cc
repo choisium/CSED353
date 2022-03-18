@@ -29,15 +29,15 @@ WrappingInt32 wrap(uint64_t n, WrappingInt32 isn) {
 //! and the other stream runs from the remote TCPSender to the local TCPReceiver and
 //! has a different ISN.
 uint64_t unwrap(WrappingInt32 n, WrappingInt32 isn, uint64_t checkpoint) {
-    uint32_t offset_n = n - isn;                         // Absolute seqno of n but with wrapping(32 bits)
-    uint32_t offset_check = (checkpoint) % (1ll << 32);  // Absolute seqno of checkpoint but with wrapping(32 bits)
-    uint64_t baseline = checkpoint - offset_check;       // The biggest multiple of 2^32 smaller than checkpoint
+    uint32_t offset_n = n - isn;  // Absolute seqno of n but with wrapping(32 bits)
+    uint64_t baseline =
+        checkpoint - (checkpoint) % (1ll << 32);  // The biggest multiple of 2^32 smaller than checkpoint
     uint64_t result = baseline + offset_n;
 
     /* Adjust result to be the closest value to checkpoint */
-    if (offset_check > offset_n && offset_check - offset_n > (1ll << 31)) {
+    if (checkpoint > result && (checkpoint - result) > (1ll << 31)) {
         result += 1ll << 32;
-    } else if (offset_n > offset_check && checkpoint > (1ll << 31) && offset_n - offset_check > (1ll << 31)) {
+    } else if (result >= (1ll << 32) && checkpoint < result && (result - checkpoint) > (1ll << 31)) {
         result -= 1ll << 32;
     }
 

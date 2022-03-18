@@ -24,22 +24,25 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
     if (header.fin)
         length -= 1;
 
+    /* If _syn_flag is not set, ignore this segment */
+    if (!_syn_flag)
+        return;
+
+    /* Compute the stream_index of current segment */
     uint64_t stream_index;
     if (header.syn && length == 0) {
         stream_index = 0;
     } else {
-        stream_index = unwrap(header.seqno, _isn, _reassembler.first_unassembled_seqno());
+        stream_index = unwrap(header.seqno, _isn, _reassembler.first_unassembled_index());
         if (!header.syn)
             stream_index -= 1;
     }
 
     /* Push payload to reassembler */
-    if (_syn_flag) {
-        _reassembler.push_substring(seg.payload().copy(), stream_index, header.fin);
-        _ackno = wrap(_reassembler.first_unassembled_seqno() + 1, _isn);
-        if (_reassembler.eof())
-            _ackno = _ackno + 1;
-    }
+    _reassembler.push_substring(seg.payload().copy(), stream_index, header.fin);
+    _ackno = wrap(_reassembler.first_unassembled_index() + 1, _isn);
+    if (_reassembler.eof())
+        _ackno = _ackno + 1;
 }
 
 optional<WrappingInt32> TCPReceiver::ackno() const {
