@@ -7,7 +7,6 @@
 #include <map>
 #include <string>
 #include <utility>
-#include <vector>
 
 //! \brief A class that assembles a series of excerpts from a byte stream (possibly out of order,
 //! possibly overlapping) into an in-order byte stream.
@@ -15,9 +14,9 @@ class StreamReassembler {
   private:
     // Your code here -- add private members as necessary.
     std::map<size_t, std::string> buffer;  //!< The buffer of unassembled segments
-    size_t _first_unassembled_index = 0;   //!< The next index to be assembled
+    size_t next_assembled_index = 0;       //!< The next index to be assembled
     size_t _unassembled_bytes = 0;         //!< The bytes of unassembled segments in buffer
-    size_t _eof_index = UINT64_MAX;        //!< The index of eof
+    size_t eof_index = UINT64_MAX;         //!< The index of eof
 
     ByteStream _output;  //!< The reassembled in-order byte stream
     size_t _capacity;    //!< The maximum number of bytes
@@ -57,11 +56,6 @@ class StreamReassembler {
     //! \brief Is the internal state empty (other than the output stream)?
     //! \returns `true` if no substrings are waiting to be assembled
     bool empty() const;
-
-    /* Below functions are auxiliary functions used in upper wrapper, tcp_receiver */
-    uint64_t first_unassembled_index() const { return _first_unassembled_index; }
-    size_t assembled_bytes() const { return _output.buffer_size(); }
-    bool eof() const { return _first_unassembled_index == _eof_index; }
 };
 
 #endif  // SPONGE_LIBSPONGE_STREAM_REASSEMBLER_HH

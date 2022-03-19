@@ -6,6 +6,8 @@
 #include "tcp_segment.hh"
 #include "wrapping_integers.hh"
 
+#include <cstdint>
+#include <map>
 #include <optional>
 
 //! \brief The "receiver" part of a TCP implementation.
@@ -22,7 +24,13 @@ class TCPReceiver {
 
     bool _syn_flag;
     WrappingInt32 _isn;
-    WrappingInt32 _ackno;
+    uint64_t _fin_seqno;
+    std::map<uint64_t, uint64_t> _seqno_space;
+
+    inline uint64_t assembled_bytes() const;
+    inline uint64_t first_unassembled_seqno() const;
+    uint64_t first_unacceptable_seqno() const;
+    void update_seqno_space(WrappingInt32 seqno, uint64_t length);
 
   public:
     //! \brief Construct a TCP receiver
@@ -30,7 +38,12 @@ class TCPReceiver {
     //! \param capacity the maximum number of bytes that the receiver will
     //!                 store in its buffers at any give time.
     TCPReceiver(const size_t capacity)
-        : _reassembler(capacity), _capacity(capacity), _syn_flag(false), _isn(0), _ackno(0) {}
+        : _reassembler(capacity)
+        , _capacity(capacity)
+        , _syn_flag(false)
+        , _isn(0)
+        , _fin_seqno(UINT64_MAX)
+        , _seqno_space() {}
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{

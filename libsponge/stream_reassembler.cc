@@ -34,8 +34,8 @@ void StreamReassembler::push_nonoverlapped_substring(const string &data, const s
 
         /* Update _index */
         if (next_elem == buffer.begin()) {
-            if (_first_unassembled_index > _index) {
-                _index = _first_unassembled_index;
+            if (next_assembled_index > _index) {
+                _index = next_assembled_index;
             }
         } else {
             auto prev_elem = prev(next_elem);
@@ -84,9 +84,9 @@ void StreamReassembler::resolve_overflow() {
 void StreamReassembler::reassemble() {
     auto top = buffer.begin();
 
-    while (!buffer.empty() && _first_unassembled_index == top->first) {
+    while (!buffer.empty() && next_assembled_index == top->first) {
         _output.write(top->second);
-        _first_unassembled_index += top->second.length();
+        next_assembled_index += top->second.length();
         _unassembled_bytes -= top->second.length();
         buffer.erase(top->first);
         top = buffer.begin();
@@ -97,9 +97,9 @@ void StreamReassembler::reassemble() {
 //! possibly out-of-order, from the logical stream, and assembles any newly
 //! contiguous substrings and writes them into the output stream in order.
 void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof) {
-    /* Record _eof_index when this segment is eof */
+    /* Record eof_index when this segment is eof */
     if (eof)
-        _eof_index = index + data.length();
+        eof_index = index + data.length();
 
     /* First, push all nonoverlapped substring of data into the buffer */
     push_nonoverlapped_substring(data, index);
@@ -111,7 +111,7 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
     reassemble();
 
     /* Signal _output end_signal if all segments was assembled */
-    if (_first_unassembled_index == _eof_index) {
+    if (next_assembled_index == eof_index) {
         _output.end_input();
     }
 }
