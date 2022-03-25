@@ -37,7 +37,7 @@ void ByteStream::pop_output(const size_t len) {
 //! \returns a string
 std::string ByteStream::read(const size_t len) {
     std::string output = peek_output(len);
-    pop_output(len);
+    pop_output(output.length());
     return output;
 }
 
