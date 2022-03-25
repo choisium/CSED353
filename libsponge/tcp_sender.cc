@@ -28,10 +28,16 @@ uint64_t TCPSender::bytes_in_flight() const {
 
 void TCPSender::fill_window() {
     /* If window size is zero, act like the window size is one */
-    if (_window == 0) _window = 1;
+    if (_window_zero_flag && _window == 0) {
+        _window = 1;
+    }
 
     /* Repeatedly send segments until window is full */
-    while (_window > 0 && (_next_seqno == 0 || !_stream.buffer_empty())) {
+    while (_window > 0 && (
+        _next_seqno == 0    /* first segment */
+    || !_stream.buffer_empty()  /* middle segments */
+    || (_stream.input_ended() && !_fin_flag)    /* last segment */
+    )) {
         TCPSegment segment;
 
         /* Set seqno */
@@ -51,6 +57,7 @@ void TCPSender::fill_window() {
         if (_window > 0 && _stream.input_ended()) {
             segment.header().fin = true;
             _window -= 1;
+            _fin_flag = true;
         }
 
         /* Send segment */
@@ -68,6 +75,8 @@ void TCPSender::fill_window() {
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
     /* Update window */
     _window = window_size;
+    if (window_size == 0) _window_zero_flag = true;
+    else _window_zero_flag = false;
 
     /* Compute absolute ackno */
     uint64_t ackno_absolute = unwrap(ackno, _isn, _next_seqno);
