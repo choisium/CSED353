@@ -29,7 +29,7 @@ uint64_t TCPSender::bytes_in_flight() const {
 
 void TCPSender::fill_window() {
     /* If window size is zero, act like the window size is one */
-    if (_window_zero_flag && _window == 0) {
+    if (_window_zero_flag && !_window_zero_sent_flag && _window == 0) {
         _window = 1;
     }
 
@@ -70,6 +70,7 @@ void TCPSender::fill_window() {
         _buffer.push(segment);
 
         run();
+        _window_zero_sent_flag = true;
     };
 }
 
@@ -78,45 +79,61 @@ void TCPSender::fill_window() {
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
     /* Update window */
     _window = window_size;
-    if (window_size == 0) _window_zero_flag = true;
-    else _window_zero_flag = false;
+    if (window_size == 0) {
+        _window_zero_flag = true;
+        _window_zero_sent_flag = false;
+    } else {
+        _window_zero_flag = false;
+        _window_zero_sent_flag = false;
+    }
 
     /* Compute absolute ackno */
     uint64_t ackno_absolute = unwrap(ackno, _isn, _next_seqno);
+
+    /* Ignore impossible ackno */
     if (ackno_absolute > _next_seqno) return;
 
     while (!_buffer.empty()) {
         /* Compute absolute seqno of buffered segment */
         TCPSegment &front = _buffer.front();
-        uint64_t seqno_absolute = unwrap(_buffer.front().header().seqno, _isn, _next_seqno);
+        uint64_t front_seqno_length = front.length_in_sequence_space();
+        uint64_t seqno_absolute = unwrap(front.header().seqno, _isn, _next_seqno);
 
         /* Stop when the segment is not acknowledged yet */
-        if (seqno_absolute >= ackno_absolute) {
+        if (seqno_absolute + front_seqno_length > ackno_absolute) {
+            if (_ackno < ackno_absolute) {
+                _bytes_in_flight -= (ackno_absolute - max(_ackno, seqno_absolute));
+            }
             break;
         }
 
         /* Remove acknowledged segment and update _bytes_in_flight */
-        _bytes_in_flight -= front.length_in_sequence_space();
+        _bytes_in_flight -= _ackno > seqno_absolute? front_seqno_length - (_ackno - seqno_absolute) :front_seqno_length;
         _buffer.pop();
     }
 
+    _window -= _bytes_in_flight;
+
     /* Stop the retransmission timer when all outstanding data has been acknowledged */
-    if (_buffer.empty()) {
-        stop();
+    if (ackno_absolute > _ackno) {
+        restart();
+        _ackno = ackno_absolute;
     }
 }
 
-void TCPSender::stop() {
-    _running = false;
-    _elapsed_time = 0;
+void TCPSender::restart() {
     _consecutive_retransmissions = 0;
     _retransmission_timeout = _initial_retransmission_timeout;
+
+    if (!_buffer.empty()) {
+        run();
+        _elapsed_time = 0;
+    }
 }
 
 void TCPSender::run() {
     if (!_running) {
         _running = true;
-        _elapsed_time = 0;
     }
 }
 
@@ -125,6 +142,7 @@ void TCPSender::retransmit() {
         /* Compute absolute seqno of buffered segment */
         TCPSegment &front = _buffer.front();
         _segments_out.push(front);
+        run();
         /* ** Maybe need to chop segments to fit with window? */
     }
 }
@@ -136,10 +154,13 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     _elapsed_time += ms_since_last_tick;
 
     if (_elapsed_time >= _retransmission_timeout) {
-        _elapsed_time = 0;
-        _consecutive_retransmissions++;
-        _retransmission_timeout *= 2;
         retransmit();
+
+        if (!_window_zero_flag) {
+            _consecutive_retransmissions++;
+            _retransmission_timeout *= 2;
+        }
+        _elapsed_time = 0;
     }
 }
 
