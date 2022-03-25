@@ -83,6 +83,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 
     /* Compute absolute ackno */
     uint64_t ackno_absolute = unwrap(ackno, _isn, _next_seqno);
+    if (ackno_absolute > _next_seqno) return;
 
     while (!_buffer.empty()) {
         /* Compute absolute seqno of buffered segment */
