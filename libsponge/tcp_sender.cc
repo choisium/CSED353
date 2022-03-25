@@ -20,7 +20,8 @@ using namespace std;
 TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const std::optional<WrappingInt32> fixed_isn)
     : _isn(fixed_isn.value_or(WrappingInt32{random_device()()}))
     , _initial_retransmission_timeout{retx_timeout}
-    , _stream(capacity) {}
+    , _stream(capacity)
+    , _retransmission_timeout{retx_timeout} {}
 
 uint64_t TCPSender::bytes_in_flight() const {
     return _bytes_in_flight;
@@ -67,6 +68,8 @@ void TCPSender::fill_window() {
 
         /* Record segment for resend */
         _buffer.push(segment);
+
+        run();
     };
 }
 
@@ -95,12 +98,51 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         _bytes_in_flight -= front.length_in_sequence_space();
         _buffer.pop();
     }
+
+    /* Stop the retransmission timer when all outstanding data has been acknowledged */
+    if (_buffer.empty()) {
+        stop();
+    }
+}
+
+void TCPSender::stop() {
+    _running = false;
+    _elapsed_time = 0;
+    _consecutive_retransmissions = 0;
+    _retransmission_timeout = _initial_retransmission_timeout;
+}
+
+void TCPSender::run() {
+    if (!_running) {
+        _running = true;
+        _elapsed_time = 0;
+    }
+}
+
+void TCPSender::retransmit() {
+    if (!_buffer.empty()) {
+        /* Compute absolute seqno of buffered segment */
+        TCPSegment &front = _buffer.front();
+        _segments_out.push(front);
+        /* ** Maybe need to chop segments to fit with window? */
+    }
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
-void TCPSender::tick(const size_t ms_since_last_tick) { DUMMY_CODE(ms_since_last_tick); }
+void TCPSender::tick(const size_t ms_since_last_tick) {
+    if (!_running) return;
 
-unsigned int TCPSender::consecutive_retransmissions() const { return {}; }
+    _elapsed_time += ms_since_last_tick;
+
+    if (_elapsed_time >= _retransmission_timeout) {
+        _elapsed_time = 0;
+        _consecutive_retransmissions++;
+        _retransmission_timeout *= 2;
+        retransmit();
+    }
+}
+
+unsigned int TCPSender::consecutive_retransmissions() const { return _consecutive_retransmissions; }
 
 void TCPSender::send_empty_segment() {
     TCPSegment segment;
