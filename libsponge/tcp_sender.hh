@@ -21,46 +21,40 @@ class Timer {
 
   public:
     Timer(const uint16_t retx_timeout = TCPConfig::TIMEOUT_DFLT)
-        : _initial_retransmission_timeout(retx_timeout)
-        , _retransmission_timeout(retx_timeout) {}
+        : _initial_retransmission_timeout(retx_timeout), _retransmission_timeout(retx_timeout) {}
 
-    void run() {
-      _running = true;
-    }
+    void run() { _running = true; }
 
     void reset() {
-      _running = false;
-      _expired = false;
-      _elapsed_time = 0;
+        _running = false;
+        _expired = false;
+        _elapsed_time = 0;
     }
 
     void reset_all() {
-      reset();
-      _retransmission_timeout = _initial_retransmission_timeout;
-      _consecutive_retransmissions = 0;
+        reset();
+        _retransmission_timeout = _initial_retransmission_timeout;
+        _consecutive_retransmissions = 0;
     }
 
     void double_rto() {
-      _consecutive_retransmissions++;
-      _retransmission_timeout *= 2;
+        _consecutive_retransmissions++;
+        _retransmission_timeout *= 2;
     }
 
     void tick(const size_t ms_since_last_tick) {
-      if (!_running) return;
+        if (!_running)
+            return;
 
-      _elapsed_time += ms_since_last_tick;
-      if (_elapsed_time >= _retransmission_timeout) {
-        _expired = true;
-      }
+        _elapsed_time += ms_since_last_tick;
+        if (_elapsed_time >= _retransmission_timeout) {
+            _expired = true;
+        }
     }
 
-    bool expired() {
-      return _running && _expired;
-    }
+    bool expired() { return _running && _expired; }
 
-    unsigned int consecutive_retransmissions() const {
-      return _consecutive_retransmissions;
-    }
+    unsigned int consecutive_retransmissions() const { return _consecutive_retransmissions; }
 };
 
 //! \brief The "sender" part of a TCP implementation.
@@ -87,11 +81,11 @@ class TCPSender {
     uint64_t _next_seqno{0};
 
     /* Added private members */
-    uint64_t _window{1};    /* Size of window */
-    bool _window_zero_flag{false}; /* Indicate receiver's window is 0 */
+    uint64_t _window{1};                         /* Size of window */
+    bool _window_zero_flag{false};               /* Indicate receiver's window is 0 */
     std::queue<TCPSegment> _outgoing_segments{}; /* Buffer to hold in-flight segments */
-    size_t _bytes_in_flight{0}; /* Bytes of in-flight segments */
-    bool _fin_flag{false};  /* Indicate already sent FIN flagged segment */
+    size_t _bytes_in_flight{0};                  /* Bytes of in-flight segments */
+    bool _fin_flag{false};                       /* Indicate already sent FIN flagged segment */
     uint64_t _ackno{0};
 
     Timer _timer;

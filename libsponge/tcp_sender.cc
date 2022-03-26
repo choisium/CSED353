@@ -23,17 +23,14 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     , _stream(capacity)
     , _timer{retx_timeout} {}
 
-uint64_t TCPSender::bytes_in_flight() const {
-    return _bytes_in_flight;
-}
+uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
 
 void TCPSender::fill_window() {
     /* Repeatedly send segments until window is full */
-    while (_window > 0 && (
-        _next_seqno == 0    /* first segment */
-    || !_stream.buffer_empty()  /* middle segments */
-    || (_stream.input_ended() && !_fin_flag)    /* last segment */
-    )) {
+    while (_window > 0 && (_next_seqno == 0                         /* first segment */
+                           || !_stream.buffer_empty()               /* middle segments */
+                           || (_stream.input_ended() && !_fin_flag) /* last segment */
+                           )) {
         TCPSegment segment;
 
         /* Set seqno */
@@ -85,7 +82,8 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     uint64_t ackno_absolute = unwrap(ackno, _isn, _next_seqno);
 
     /* Ignore impossible ackno */
-    if (ackno_absolute > _next_seqno) return;
+    if (ackno_absolute > _next_seqno)
+        return;
 
     while (!_outgoing_segments.empty()) {
         /* Compute absolute seqno of buffered segment */
@@ -102,7 +100,11 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         }
 
         /* Remove acknowledged segment and update _bytes_in_flight */
-        _bytes_in_flight -= _ackno > seqno_absolute? front_seqno_length - (_ackno - seqno_absolute) :front_seqno_length;
+        if (_ackno > seqno_absolute) {
+            _bytes_in_flight -= front_seqno_length - (_ackno - seqno_absolute);
+        } else {
+            _bytes_in_flight -= front_seqno_length;
+        }
         _outgoing_segments.pop();
     }
 
@@ -117,7 +119,6 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
             /* If there's any in-flight segments, restart timer */
             _timer.run();
         }
-
     }
 }
 
@@ -126,7 +127,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     _timer.tick(ms_since_last_tick);
 
     if (_timer.expired()) {
-        TCPSegment &front = _outgoing_egments.front();
+        TCPSegment &front = _outgoing_segments.front();
         _segments_out.push(front);
 
         if (!_window_zero_flag) {
