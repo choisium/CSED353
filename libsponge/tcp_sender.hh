@@ -17,7 +17,6 @@ class Timer {
     unsigned int _consecutive_retransmissions{0};
     unsigned int _elapsed_time{0};
     bool _running{false};
-    bool _expired{false};
 
   public:
     Timer(const uint16_t retx_timeout = TCPConfig::TIMEOUT_DFLT)
@@ -27,7 +26,6 @@ class Timer {
 
     void reset() {
         _running = false;
-        _expired = false;
         _elapsed_time = 0;
     }
 
@@ -43,16 +41,11 @@ class Timer {
     }
 
     void tick(const size_t ms_since_last_tick) {
-        if (!_running)
-            return;
-
-        _elapsed_time += ms_since_last_tick;
-        if (_elapsed_time >= _retransmission_timeout) {
-            _expired = true;
-        }
+        if (_running)
+            _elapsed_time += ms_since_last_tick;
     }
 
-    bool expired() { return _running && _expired; }
+    bool expired() { return _elapsed_time >= _retransmission_timeout; }
 
     unsigned int consecutive_retransmissions() const { return _consecutive_retransmissions; }
 };
@@ -86,7 +79,7 @@ class TCPSender {
     std::queue<TCPSegment> _outgoing_segments{}; /* Buffer to hold in-flight segments */
     size_t _bytes_in_flight{0};                  /* Bytes of in-flight segments */
     bool _fin_flag{false};                       /* Indicate already sent FIN flagged segment */
-    uint64_t _ackno{0};
+    uint64_t _last_ackno{0};                     /* Value of last biggest ackno */
 
     Timer _timer;
 

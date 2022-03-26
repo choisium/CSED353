@@ -53,14 +53,13 @@ void TCPSender::fill_window() {
             _fin_flag = true;
         }
 
-        /* Send segment */
+        /* Send and record segment for retransmission*/
         _segments_out.push(segment);
-        _bytes_in_flight += segment.length_in_sequence_space();
-        _next_seqno += segment.length_in_sequence_space();
-
-        /* Record segment for resend */
         _outgoing_segments.push(segment);
+        _next_seqno += segment.length_in_sequence_space();
+        _bytes_in_flight += segment.length_in_sequence_space();
 
+        /* Run timer */
         _timer.run();
     };
 }
@@ -79,46 +78,44 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     }
 
     /* Compute absolute ackno */
+    // uint64_t left_edge = unwrap(ackno, _isn, _next_seqno);
+    // uint64_t right_edge = left_edge + window_size;
     uint64_t ackno_absolute = unwrap(ackno, _isn, _next_seqno);
 
-    /* Ignore impossible ackno */
-    if (ackno_absolute > _next_seqno)
+    /* Ignore impossible or duplicated ackno */
+    if (ackno_absolute > _next_seqno || ackno_absolute <= _last_ackno)
         return;
 
     while (!_outgoing_segments.empty()) {
         /* Compute absolute seqno of buffered segment */
-        TCPSegment &front = _outgoing_segments.front();
-        uint64_t front_seqno_length = front.length_in_sequence_space();
-        uint64_t seqno_absolute = unwrap(front.header().seqno, _isn, _next_seqno);
+        TCPSegment &segment = _outgoing_segments.front();
+        uint64_t segment_seqno = unwrap(segment.header().seqno, _isn, _next_seqno);
+        uint64_t segment_end_seqno = segment_seqno + segment.length_in_sequence_space();
+        uint64_t right_acked_seqno = min(ackno_absolute, segment_end_seqno);
+        uint64_t left_acked_seqno = max(segment_seqno, _last_ackno);
 
-        /* Stop when the segment is not acknowledged yet */
-        if (seqno_absolute + front_seqno_length > ackno_absolute) {
-            if (_ackno < ackno_absolute) {
-                _bytes_in_flight -= (ackno_absolute - max(_ackno, seqno_absolute));
-            }
+        /* update _bytes_in_flight */
+        _bytes_in_flight -= right_acked_seqno - left_acked_seqno;
+
+        /* Stop when the segment is not fully acknowledged yet */
+        if (right_acked_seqno != segment_end_seqno) {
             break;
         }
 
         /* Remove acknowledged segment and update _bytes_in_flight */
-        if (_ackno > seqno_absolute) {
-            _bytes_in_flight -= front_seqno_length - (_ackno - seqno_absolute);
-        } else {
-            _bytes_in_flight -= front_seqno_length;
-        }
         _outgoing_segments.pop();
     }
 
+    /* Update _window and _last_ackno */
     _window -= _bytes_in_flight;
+    _last_ackno = ackno_absolute;
 
-    /* Stop the retransmission timer when all outstanding data has been acknowledged */
-    if (ackno_absolute > _ackno) {
-        _ackno = ackno_absolute;
+    /* Reset RTO */
+    _timer.reset_all();
 
-        _timer.reset_all(); /* Reset RTO */
-        if (!_outgoing_segments.empty()) {
-            /* If there's any in-flight segments, restart timer */
-            _timer.run();
-        }
+    /* If there's any in-flight segments, restart timer */
+    if (!_outgoing_segments.empty()) {
+        _timer.run();
     }
 }
 
