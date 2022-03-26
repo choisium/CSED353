@@ -26,11 +26,17 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
 uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
 
 void TCPSender::fill_window() {
+    /*
+     * Compute remaining window.
+     * If receiver's window size is zero, act like the window size is one.
+     */
+    uint64_t remaining_window = (_window == 0 ? 1 : _window) - _bytes_in_flight;
+
     /* Repeatedly send segments until window is full */
-    while (_window > 0 && (_next_seqno == 0                         /* first segment */
-                           || !_stream.buffer_empty()               /* middle segments */
-                           || (_stream.input_ended() && !_fin_flag) /* last segment */
-                           )) {
+    while (remaining_window > 0 && (_next_seqno == 0                         /* first segment */
+                                    || !_stream.buffer_empty()               /* middle segments */
+                                    || (_stream.input_ended() && !_fin_flag) /* last segment */
+                                    )) {
         TCPSegment segment;
 
         /* Set seqno */
@@ -39,17 +45,17 @@ void TCPSender::fill_window() {
         /* Set SYN signal */
         if (_next_seqno == 0) {
             segment.header().syn = true;
-            _window -= 1;
+            remaining_window -= 1;
         }
 
         /* Set payload */
-        segment.payload() = Buffer(_stream.read(min(_window, TCPConfig::MAX_PAYLOAD_SIZE)));
-        _window -= segment.payload().size();
+        segment.payload() = Buffer(_stream.read(min(remaining_window, TCPConfig::MAX_PAYLOAD_SIZE)));
+        remaining_window -= segment.payload().size();
 
         /* Set FIN signal */
-        if (_window > 0 && _stream.input_ended()) {
+        if (remaining_window > 0 && _stream.input_ended()) {
             segment.header().fin = true;
-            _window -= 1;
+            remaining_window -= 1;
             _fin_flag = true;
         }
 
@@ -68,18 +74,9 @@ void TCPSender::fill_window() {
 //! \param window_size The remote receiver's advertised window size
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
     /* Update window */
-    /* If window size is zero, act like the window size is one */
-    if (window_size == 0) {
-        _window = 1;
-        _window_zero_flag = true;
-    } else {
-        _window = window_size;
-        _window_zero_flag = false;
-    }
+    _window = window_size;
 
     /* Compute absolute ackno */
-    // uint64_t left_edge = unwrap(ackno, _isn, _next_seqno);
-    // uint64_t right_edge = left_edge + window_size;
     uint64_t ackno_absolute = unwrap(ackno, _isn, _next_seqno);
 
     /* Ignore impossible or duplicated ackno */
@@ -107,7 +104,6 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     }
 
     /* Update _window and _last_ackno */
-    _window -= _bytes_in_flight;
     _last_ackno = ackno_absolute;
 
     /* Reset RTO */
@@ -124,12 +120,16 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     _timer.tick(ms_since_last_tick);
 
     if (_timer.expired()) {
-        TCPSegment &front = _outgoing_segments.front();
-        _segments_out.push(front);
+        /* Retransmit the earliest segment */
+        TCPSegment &segment = _outgoing_segments.front();
+        _segments_out.push(segment);
 
-        if (!_window_zero_flag) {
+        /* If window is zero, double RTO for exponential backoff */
+        if (_window != 0) {
             _timer.double_rto();
         }
+
+        /* Reset and run timer */
         _timer.reset();
         _timer.run();
     }
