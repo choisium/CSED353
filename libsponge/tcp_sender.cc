@@ -21,7 +21,7 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     : _isn(fixed_isn.value_or(WrappingInt32{random_device()()}))
     , _initial_retransmission_timeout{retx_timeout}
     , _stream(capacity)
-    , _retransmission_timeout{retx_timeout} {}
+    , _timer{retx_timeout} {}
 
 uint64_t TCPSender::bytes_in_flight() const {
     return _bytes_in_flight;
@@ -62,9 +62,9 @@ void TCPSender::fill_window() {
         _next_seqno += segment.length_in_sequence_space();
 
         /* Record segment for resend */
-        _buffer.push(segment);
+        _outgoing_segments.push(segment);
 
-        run();
+        _timer.run();
     };
 }
 
@@ -87,9 +87,9 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     /* Ignore impossible ackno */
     if (ackno_absolute > _next_seqno) return;
 
-    while (!_buffer.empty()) {
+    while (!_outgoing_segments.empty()) {
         /* Compute absolute seqno of buffered segment */
-        TCPSegment &front = _buffer.front();
+        TCPSegment &front = _outgoing_segments.front();
         uint64_t front_seqno_length = front.length_in_sequence_space();
         uint64_t seqno_absolute = unwrap(front.header().seqno, _isn, _next_seqno);
 
@@ -103,62 +103,41 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 
         /* Remove acknowledged segment and update _bytes_in_flight */
         _bytes_in_flight -= _ackno > seqno_absolute? front_seqno_length - (_ackno - seqno_absolute) :front_seqno_length;
-        _buffer.pop();
+        _outgoing_segments.pop();
     }
 
     _window -= _bytes_in_flight;
 
     /* Stop the retransmission timer when all outstanding data has been acknowledged */
     if (ackno_absolute > _ackno) {
-        restart();
         _ackno = ackno_absolute;
-    }
-}
 
-void TCPSender::restart() {
-    _consecutive_retransmissions = 0;
-    _retransmission_timeout = _initial_retransmission_timeout;
+        _timer.reset_all(); /* Reset RTO */
+        if (!_outgoing_segments.empty()) {
+            /* If there's any in-flight segments, restart timer */
+            _timer.run();
+        }
 
-    if (!_buffer.empty()) {
-        run();
-        _elapsed_time = 0;
-    }
-}
-
-void TCPSender::run() {
-    if (!_running) {
-        _running = true;
-    }
-}
-
-void TCPSender::retransmit() {
-    if (!_buffer.empty()) {
-        /* Compute absolute seqno of buffered segment */
-        TCPSegment &front = _buffer.front();
-        _segments_out.push(front);
-        run();
-        /* ** Maybe need to chop segments to fit with window? */
     }
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void TCPSender::tick(const size_t ms_since_last_tick) {
-    if (!_running) return;
+    _timer.tick(ms_since_last_tick);
 
-    _elapsed_time += ms_since_last_tick;
-
-    if (_elapsed_time >= _retransmission_timeout) {
-        retransmit();
+    if (_timer.expired()) {
+        TCPSegment &front = _outgoing_egments.front();
+        _segments_out.push(front);
 
         if (!_window_zero_flag) {
-            _consecutive_retransmissions++;
-            _retransmission_timeout *= 2;
+            _timer.double_rto();
         }
-        _elapsed_time = 0;
+        _timer.reset();
+        _timer.run();
     }
 }
 
-unsigned int TCPSender::consecutive_retransmissions() const { return _consecutive_retransmissions; }
+unsigned int TCPSender::consecutive_retransmissions() const { return _timer.consecutive_retransmissions(); }
 
 void TCPSender::send_empty_segment() {
     TCPSegment segment;
