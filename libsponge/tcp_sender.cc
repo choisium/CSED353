@@ -28,11 +28,6 @@ uint64_t TCPSender::bytes_in_flight() const {
 }
 
 void TCPSender::fill_window() {
-    /* If window size is zero, act like the window size is one */
-    if (_window_zero_flag && !_window_zero_sent_flag && _window == 0) {
-        _window = 1;
-    }
-
     /* Repeatedly send segments until window is full */
     while (_window > 0 && (
         _next_seqno == 0    /* first segment */
@@ -70,7 +65,6 @@ void TCPSender::fill_window() {
         _buffer.push(segment);
 
         run();
-        _window_zero_sent_flag = true;
     };
 }
 
@@ -78,13 +72,13 @@ void TCPSender::fill_window() {
 //! \param window_size The remote receiver's advertised window size
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
     /* Update window */
-    _window = window_size;
+    /* If window size is zero, act like the window size is one */
     if (window_size == 0) {
+        _window = 1;
         _window_zero_flag = true;
-        _window_zero_sent_flag = false;
     } else {
+        _window = window_size;
         _window_zero_flag = false;
-        _window_zero_sent_flag = false;
     }
 
     /* Compute absolute ackno */

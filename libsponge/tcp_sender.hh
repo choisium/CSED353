@@ -35,7 +35,6 @@ class TCPSender {
     /* Added private members */
     uint64_t _window{1};    /* Size of window */
     bool _window_zero_flag{false}; /* Indicate receiver's window is full */
-    bool _window_zero_sent_flag{false}; /* Indicates if a segment is sent after _window_zero_flag is set */
     std::queue<TCPSegment> _buffer{}; /* Buffer to hold in-flight segments */
     size_t _bytes_in_flight{0}; /* Bytes of in-flight segments */
     bool _fin_flag{false};  /* Indicate already sent FIN flagged segment */
