@@ -53,7 +53,7 @@ void TCPSender::fill_window() {
         remaining_window -= segment.payload().size();
 
         /* Set FIN signal */
-        if (remaining_window > 0 && _stream.input_ended()) {
+        if (remaining_window > 0 && _stream.eof()) {
             segment.header().fin = true;
             remaining_window -= 1;
             _fin_flag = true;
