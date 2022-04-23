@@ -29,8 +29,6 @@ bool TCPConnection::_outbound_fully_acknowledged() const {
 }
 
 void TCPConnection::_send() {
-    if (!active()) return;
-
     while (!_sender.segments_out().empty()) {
         TCPSegment &segment = _sender.segments_out().front();
         _sender.segments_out().pop();
@@ -93,7 +91,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
         _sender.send_empty_segment();
     }
 
-    /* If FIN packet received before outbound reached EOF, linger false */
+    /* passive close */
     if (_receiver.stream_out().input_ended() && !_sender.stream_in().eof()) {
         _linger_after_streams_finish = false;
     }
@@ -122,14 +120,14 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
 
     if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) {
         _send_rst();
+    } else {
+        _send();
     }
-
-    _send();
 }
 
 void TCPConnection::end_input_stream() {
     _sender.stream_in().end_input();
-    // send FIN packet
+    // send FIN packetdfj
     _sender.fill_window();
     _send();
 }
