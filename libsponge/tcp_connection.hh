@@ -27,8 +27,8 @@ class TCPConnection {
     void _send();
     void _send_rst();
 
-    bool _inbound_fully_assembled() const;     // close prerequisite #1
-    bool _outbound_fully_acknowledged() const; // close prerequisite #2
+    bool _inbound_fully_assembled() const;      // close prerequisite #1
+    bool _outbound_fully_acknowledged() const;  // close prerequisite #2
 
   public:
     //! \name "Input" interface for the writer

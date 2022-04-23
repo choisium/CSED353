@@ -1,8 +1,8 @@
 #include "tcp_connection.hh"
 
 #include <iostream>
-#include <queue>
 #include <optional>
+#include <queue>
 
 // Dummy implementation of a TCP connection
 
@@ -24,8 +24,8 @@ bool TCPConnection::_inbound_fully_assembled() const {
 }
 
 bool TCPConnection::_outbound_fully_acknowledged() const {
-    return _sender.stream_in().eof() && _sender.bytes_in_flight() == 0
-    && _sender.next_seqno_absolute() == _sender.stream_in().bytes_written() + 2;
+    return _sender.stream_in().eof() && _sender.bytes_in_flight() == 0 &&
+           _sender.next_seqno_absolute() == _sender.stream_in().bytes_written() + 2;
 }
 
 void TCPConnection::_send() {
@@ -77,18 +77,15 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 
     if (_receiver.ackno().has_value()) {
         _sender.fill_window();
-        
-        if (seg.length_in_sequence_space() != 0) {
-            if (_sender.segments_out().empty()) {
-                _sender.send_empty_segment();
-            }
-        }
-    }
 
-    if (_receiver.ackno().has_value()
-        && (seg.length_in_sequence_space() == 0)
-        && seg.header().seqno == _receiver.ackno().value() - 1) {
-        _sender.send_empty_segment();
+        /* When segment occurpies any sequence number or it is keep-alive segment,
+           there should be at least one segment in reply */
+        if (_sender.segments_out().empty() &&
+            (seg.length_in_sequence_space() != 0
+             || seg.header().seqno == _receiver.ackno().value() - 1)
+        ) {
+            _sender.send_empty_segment();
+        }
     }
 
     /* passive close */
@@ -100,10 +97,9 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 }
 
 bool TCPConnection::active() const {
-    return !_sender.stream_in().error() && !_receiver.stream_out().error()
-        && (!_inbound_fully_assembled()
-        || !_outbound_fully_acknowledged()
-        || (_linger_after_streams_finish && _time_since_last_segment_received < 10 * _cfg.rt_timeout));
+    return !_sender.stream_in().error() && !_receiver.stream_out().error() &&
+           (!_inbound_fully_assembled() || !_outbound_fully_acknowledged() ||
+            (_linger_after_streams_finish && _time_since_last_segment_received < 10 * _cfg.rt_timeout));
 }
 
 size_t TCPConnection::write(const string &data) {
@@ -118,7 +114,7 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
     _sender.tick(ms_since_last_tick);
     _time_since_last_segment_received += ms_since_last_tick;
 
-    if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) {
+    if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) { // active close
         _send_rst();
     } else {
         _send();
