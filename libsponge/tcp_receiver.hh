@@ -22,15 +22,11 @@ class TCPReceiver {
     //! The maximum number of bytes we'll store.
     size_t _capacity;
 
-    bool _syn_flag;
-    WrappingInt32 _isn;
-    uint64_t _fin_seqno;
-    std::map<uint64_t, uint64_t> _seqno_space;
+    bool _syn_flag{false};
+    bool _fin_flag{false};
+    WrappingInt32 _isn{0};
 
-    inline uint64_t assembled_bytes() const;
     inline uint64_t first_unassembled_seqno() const;
-    uint64_t first_unacceptable_seqno() const;
-    bool update_seqno_space(WrappingInt32 seqno, uint64_t length);
 
   public:
     //! \brief Construct a TCP receiver
@@ -39,11 +35,7 @@ class TCPReceiver {
     //!                 store in its buffers at any give time.
     TCPReceiver(const size_t capacity)
         : _reassembler(capacity)
-        , _capacity(capacity)
-        , _syn_flag(false)
-        , _isn(0)
-        , _fin_seqno(UINT64_MAX)
-        , _seqno_space() {}
+        , _capacity(capacity) {}
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{

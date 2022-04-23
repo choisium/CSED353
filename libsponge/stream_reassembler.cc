@@ -22,7 +22,16 @@ void StreamReassembler::push_nonoverlapped_substring(const string &data, const s
     size_t _index = index;                       // Start index of nonoverlapped substring
     size_t _last_index = index + data.length();  // Last index of nonoverlapped substring
 
-    while (_index <= _last_index) {
+    if (_index < next_assembled_index)
+        _index = next_assembled_index;
+
+    size_t first_unacceptable_index = next_assembled_index + (_capacity - _output.buffer_size());
+    if (_last_index > first_unacceptable_index) {
+        _last_index = first_unacceptable_index;
+    }
+
+    while (_index < _last_index) {
+
         /* Update _last_index */
         if (next_elem == buffer.end()) {
             _last_index = index + data.length();
