@@ -19,50 +19,37 @@ void TCPConnection::_abort_connection() {
     _sender.stream_in().set_error();
 }
 
+bool TCPConnection::_inbound_fully_assembled() const {
+    return _receiver.stream_out().input_ended() && _receiver.unassembled_bytes() == 0;
+}
+
+bool TCPConnection::_outbound_fully_acknowledged() const {
+    return _sender.stream_in().eof() && _sender.bytes_in_flight() == 0
+    && _sender.next_seqno_absolute() == _sender.stream_in().bytes_written() + 2;
+}
+
 void TCPConnection::_send() {
-    queue<TCPSegment> &sender_segments_out = _sender.segments_out();
-    
-    while (!sender_segments_out.empty()) {
-        TCPSegment &segment = sender_segments_out.front();
+    if (!active()) return;
+
+    while (!_sender.segments_out().empty()) {
+        TCPSegment &segment = _sender.segments_out().front();
+        _sender.segments_out().pop();
 
         optional<WrappingInt32> ackno = _receiver.ackno();
         if (ackno.has_value()) {
             segment.header().ack = true;
-            segment.header().ackno = * ackno;
+            segment.header().ackno = *ackno;
+            segment.header().win = min(_receiver.window_size(), static_cast<size_t>(numeric_limits<uint16_t>::max()));
         }
 
-        segment.header().win = min(_receiver.window_size(), static_cast<size_t>(numeric_limits<uint16_t>::max()));
-
         _segments_out.push(segment);
-        sender_segments_out.pop();
     }
 }
 
-
 void TCPConnection::_send_rst() {
-    while(!_sender.segments_out().empty()) {
-        _sender.segments_out().pop();
-    }
-    while(!_segments_out.empty()) {
-        _segments_out.pop();
-    }
-
-    _sender.send_empty_segment();
-
-    queue<TCPSegment> &sender_segments_out = _sender.segments_out();
-    
-    TCPSegment &segment = sender_segments_out.front();
-
-    optional<WrappingInt32> ackno = _receiver.ackno();
-    if (ackno.has_value()) {
-        segment.header().ack = true;
-        segment.header().ackno = * ackno;
-    }
-    segment.header().win = _receiver.window_size();
+    TCPSegment segment;
     segment.header().rst = true;
-
     _segments_out.push(segment);
-    sender_segments_out.pop();
 
     _abort_connection();
 }
@@ -107,7 +94,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
     }
 
     /* If FIN packet received before outbound reached EOF, linger false */
-    if (_receiver.stream_out().eof() && !_sender.stream_in().eof()){ // && _sender.segments_out().empty() && _segments_out.empty())) {
+    if (_receiver.stream_out().input_ended() && !_sender.stream_in().eof()) {
         _linger_after_streams_finish = false;
     }
 
@@ -115,12 +102,10 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 }
 
 bool TCPConnection::active() const {
-    const ByteStream &stream_in = _sender.stream_in();
-    const ByteStream &stream_out = _receiver.stream_out();
-
-
-    return (!stream_in.error() && (!stream_in.eof() || bytes_in_flight() > 0)) || (!stream_out.error() && !stream_out.eof())
-        || (_linger_after_streams_finish && stream_in.eof() && stream_out.eof());
+    return !_sender.stream_in().error() && !_receiver.stream_out().error()
+        && (!_inbound_fully_assembled()
+        || !_outbound_fully_acknowledged()
+        || (_linger_after_streams_finish && _time_since_last_segment_received < 10 * _cfg.rt_timeout));
 }
 
 size_t TCPConnection::write(const string &data) {
@@ -138,12 +123,7 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
     if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) {
         _send_rst();
     }
-    if (_receiver.stream_out().eof()
-    && _sender.stream_in().eof()
-    && bytes_in_flight() == 0
-    && _time_since_last_segment_received >= 10 * _cfg.rt_timeout) {
-        _linger_after_streams_finish = false;
-    }
+
     _send();
 }
 
