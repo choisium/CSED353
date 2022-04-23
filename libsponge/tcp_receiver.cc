@@ -13,9 +13,11 @@ using namespace std;
 inline uint64_t TCPReceiver::assembled_bytes() const { return stream_out().buffer_size(); }
 
 inline uint64_t TCPReceiver::first_unassembled_seqno() const {
-    if (_seqno_space.empty())
-        return 0;
-    return _seqno_space.begin()->second;
+    uint64_t _first_unassembled_seqno = 0;
+    if (_syn_flag) _first_unassembled_seqno += 1;
+    _first_unassembled_seqno += stream_out().bytes_written();
+    if (stream_out().input_ended()) _first_unassembled_seqno += 1;
+    return _first_unassembled_seqno;
 }
 
 uint64_t TCPReceiver::first_unacceptable_seqno() const {
@@ -26,11 +28,15 @@ uint64_t TCPReceiver::first_unacceptable_seqno() const {
     return _first_unacceptable_seqno;
 }
 
-void TCPReceiver::update_seqno_space(WrappingInt32 seqno, uint64_t length) {
+bool TCPReceiver::update_seqno_space(WrappingInt32 seqno, uint64_t length) {
     uint64_t start_seqno = unwrap(seqno, _isn, first_unassembled_seqno());
     uint64_t end_seqno = start_seqno + length;
     uint64_t _first_unacceptable_seqno = first_unacceptable_seqno();
     auto next_elem = _seqno_space.upper_bound(start_seqno);
+
+    if (start_seqno >= _first_unacceptable_seqno || end_seqno <= first_unassembled_seqno()) {
+        return false;
+    }
 
     /* Merge with previous item if seqno space is overlapped */
     if (next_elem != _seqno_space.begin()) {
@@ -58,6 +64,8 @@ void TCPReceiver::update_seqno_space(WrappingInt32 seqno, uint64_t length) {
 
     /* Insert segment's sequence space */
     _seqno_space.insert(make_pair(start_seqno, end_seqno));
+
+    return true;
 }
 
 void TCPReceiver::segment_received(const TCPSegment &seg) {
@@ -81,7 +89,8 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
     }
 
     /* Update sequence number space to keep track window and ackno */
-    update_seqno_space(header.seqno, length);
+    bool updated = update_seqno_space(header.seqno, length);
+    if (!updated) return;
 
     /* Compute the stream_index of current segment */
     uint64_t stream_index;

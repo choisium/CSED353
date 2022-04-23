@@ -30,7 +30,7 @@ class TCPReceiver {
     inline uint64_t assembled_bytes() const;
     inline uint64_t first_unassembled_seqno() const;
     uint64_t first_unacceptable_seqno() const;
-    void update_seqno_space(WrappingInt32 seqno, uint64_t length);
+    bool update_seqno_space(WrappingInt32 seqno, uint64_t length);
 
   public:
     //! \brief Construct a TCP receiver
