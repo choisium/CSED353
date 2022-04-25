@@ -19,15 +19,6 @@ void TCPConnection::_abort_connection() {
     _sender.stream_in().set_error();
 }
 
-bool TCPConnection::_inbound_fully_assembled() const {
-    return _receiver.stream_out().input_ended() && _receiver.unassembled_bytes() == 0;
-}
-
-bool TCPConnection::_outbound_fully_acknowledged() const {
-    return _sender.stream_in().eof() && _sender.bytes_in_flight() == 0 &&
-           _sender.next_seqno_absolute() == _sender.stream_in().bytes_written() + 2;
-}
-
 void TCPConnection::_send() {
     while (!_sender.segments_out().empty()) {
         TCPSegment &segment = _sender.segments_out().front();
@@ -81,9 +72,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
         /* When segment occurpies any sequence number or it is keep-alive segment,
            there should be at least one segment in reply */
         if (_sender.segments_out().empty() &&
-            (seg.length_in_sequence_space() != 0
-             || seg.header().seqno == _receiver.ackno().value() - 1)
-        ) {
+            (seg.length_in_sequence_space() != 0 || seg.header().seqno == _receiver.ackno().value() - 1)) {
             _sender.send_empty_segment();
         }
     }
@@ -97,9 +86,23 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 }
 
 bool TCPConnection::active() const {
-    return !_sender.stream_in().error() && !_receiver.stream_out().error() &&
-           (!_inbound_fully_assembled() || !_outbound_fully_acknowledged() ||
-            (_linger_after_streams_finish && _time_since_last_segment_received < 10 * _cfg.rt_timeout));
+    if (_sender.stream_in().error() || _receiver.stream_out().error())
+        return false;
+
+    /* Clean shutdown prereq #1. Inbound stream fully assembled and has ended */
+    if (!_receiver.stream_out().input_ended() || _receiver.unassembled_bytes() != 0)
+        return true;
+
+    /* Clean shutdown prereq #2 & #3. Outbound stream ended, fully sent and acked */
+    if (!_sender.stream_in().eof() || _sender.bytes_in_flight() != 0 ||
+        _sender.next_seqno_absolute() != _sender.stream_in().bytes_written() + 2)
+        return true;
+
+    /* Active close */
+    if (_linger_after_streams_finish && _time_since_last_segment_received < 10 * _cfg.rt_timeout)
+        return true;
+
+    return false;
 }
 
 size_t TCPConnection::write(const string &data) {
@@ -114,7 +117,7 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
     _sender.tick(ms_since_last_tick);
     _time_since_last_segment_received += ms_since_last_tick;
 
-    if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) { // active close
+    if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) {  // active close
         _send_rst();
     } else {
         _send();
@@ -123,7 +126,7 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
 
 void TCPConnection::end_input_stream() {
     _sender.stream_in().end_input();
-    // send FIN packetdfj
+    // send FIN packet
     _sender.fill_window();
     _send();
 }
