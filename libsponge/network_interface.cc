@@ -66,7 +66,6 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
 
         header.type = EthernetHeader::TYPE_ARP;
         header.dst = BROADCAST_ADDRESS;
-        // header.dst = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
         frame.payload() = msg.serialize();
 
         _datagram_queue.insert(make_pair(next_hop_ip, dgram));

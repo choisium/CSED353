@@ -51,14 +51,14 @@ class NetworkInterface {
     // mapping of expiry time to ip address waiting for ARP reply message
     std::deque<std::pair<size_t, uint32_t>> _address_waiting{};
 
-    // mapping of next hope ip to datagram
+    // mapping of next hop ip to datagram
     std::multimap<uint32_t, InternetDatagram> _datagram_queue{};
 
     // store current tick
     size_t _current_tick{0};
 
     // constant for broadcast address
-    const std::array<uint8_t, 6> BROADCAST_ADDRESS{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    const EthernetAddress BROADCAST_ADDRESS{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
   public:
     //! \brief Construct a network interface with given Ethernet (network-access-layer) and IP (internet-layer) addresses
