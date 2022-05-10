@@ -29,14 +29,37 @@ void Router::add_route(const uint32_t route_prefix,
     cerr << "DEBUG: adding route " << Address::from_ipv4_numeric(route_prefix).ip() << "/" << int(prefix_length)
          << " => " << (next_hop.has_value() ? next_hop->ip() : "(direct)") << " on interface " << interface_num << "\n";
 
-    DUMMY_CODE(route_prefix, prefix_length, next_hop, interface_num);
-    // Your code here.
+    /* Insert route in descending order of prefix_length */
+    auto iter = _routing_table.begin();
+    for (; iter != _routing_table.end(); iter++) {
+        if (prefix_length > get<1>(*iter))
+            break;
+    }
+
+    _routing_table.insert(iter, make_tuple(route_prefix, prefix_length, next_hop, interface_num));
 }
 
 //! \param[in] dgram The datagram to be routed
 void Router::route_one_datagram(InternetDatagram &dgram) {
-    DUMMY_CODE(dgram);
-    // Your code here.
+    /* Find longest-prefix-match route */
+    auto iter = _routing_table.begin();
+    for (; iter != _routing_table.end(); iter++) {
+        if (get<1>(*iter) == 0 || ((dgram.header().dst ^ get<0>(*iter)) >> (32 - get<1>(*iter))) == 0)
+            break;
+    }
+
+    /* If any routes matched and decremented ttl is not zero, send datagram */
+    if (iter != _routing_table.end() && dgram.header().ttl > 1) {
+        dgram.header().ttl--;
+
+        /* If route has empty next_hop, set next_hop as the dst of dgram */
+        optional<Address> next_hop = get<2>(*iter);
+        if (!next_hop.has_value()) {
+            next_hop = Address::from_ipv4_numeric(dgram.header().dst);
+        }
+
+        interface(get<3>(*iter)).send_datagram(dgram, next_hop.value());
+    }
 }
 
 void Router::route() {
