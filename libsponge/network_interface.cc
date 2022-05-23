@@ -99,7 +99,6 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
         // check unsent datagrams waiting for ethernet address
         auto range = _datagram_queue.equal_range(in_msg.sender_ip_address);
         for (auto iter = range.first; iter != range.second; iter++) {
-            cout << "sending dgram after receiving ARP" << endl;
             EthernetFrame out_frame;
             EthernetHeader &out_header = out_frame.header();
             out_header.type = EthernetHeader::TYPE_IPv4;
